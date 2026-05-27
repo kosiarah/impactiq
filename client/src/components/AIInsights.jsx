@@ -203,39 +203,17 @@ export default function AIInsights() {
     setLoading(true)
     setApiError(null)
     try {
-      const prompt = `You are a Shopify analytics expert. Based on this merchant data, generate 5 actionable business recommendations in JSON format. Each insight must have: id (number), category (one of: revenue/mobile/timing/product/conversion), priority (urgent/high/medium), title (concise headline), insight (2-3 sentences of analysis), action (specific next step), impact (Very High/High/Medium/Low), effort (High/Medium/Low), metric (short stat like "+85% AOV").
-
-Merchant: ${MERCHANT_CONTEXT.storeName}
-Period: ${MERCHANT_CONTEXT.period}
-Charity conversion rate: ${MERCHANT_CONTEXT.charityConversionRate}% (baseline: ${MERCHANT_CONTEXT.baselineConversionRate}%)
-AOV with charity: $${MERCHANT_CONTEXT.aovWithCharity} vs baseline $${MERCHANT_CONTEXT.aovBaseline}
-Mobile charity selection: ${MERCHANT_CONTEXT.mobileConversionRate}% vs desktop ${MERCHANT_CONTEXT.desktopConversionRate}%
-Weekend charity rate: ${MERCHANT_CONTEXT.weekendCharityRate}% vs weekday ${MERCHANT_CONTEXT.weekdayCharityRate}%
-Top charity by revenue: ${MERCHANT_CONTEXT.topCharity} (AOV lift: +${MERCHANT_CONTEXT.topCharityLift}%)
-Highest AOV charity: ${MERCHANT_CONTEXT.highestAOVCharity} (+${MERCHANT_CONTEXT.highestAOVLift}%)
-Abandoned sessions with charity shown: ${MERCHANT_CONTEXT.abandonedWithCharityShown}
-
-Return ONLY a valid JSON array of 5 insight objects. No preamble, no markdown.`
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('http://localhost:3001/api/insights/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
       })
 
       if (!response.ok) throw new Error(`API error: ${response.status}`)
 
       const data = await response.json()
-      const text = data.content?.find(b => b.type === 'text')?.text || ''
-      const cleaned = text.replace(/```json|```/g, '').trim()
-      const parsed = JSON.parse(cleaned)
 
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setInsights(parsed)
+      if (Array.isArray(data.insights) && data.insights.length > 0) {
+        setInsights(data.insights)
         setLastRefreshed('Just now')
       }
     } catch (err) {
