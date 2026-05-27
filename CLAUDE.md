@@ -56,7 +56,7 @@ There is no test suite yet.
 3. Claude is called with `max_tokens: 2000`, expected to return a raw JSON array (no markdown fences)
 4. Response is parsed and forwarded to the client
 
-**Current state**: Frontend components (`Overview.jsx`, `CharityBreakdown.jsx`, `AIInsights.jsx`) still use **hardcoded static mock data** — they have not been wired to the backend REST API yet.
+**Current state**: All three frontend components (`Overview.jsx`, `CharityBreakdown.jsx`, `AIInsights.jsx`) are wired to the backend REST API via a Vite proxy (`/api/* → localhost:3001`). Auth-aware fetching uses `client/src/api.js` with a Bearer token bootstrapped on first load.
 
 ---
 
@@ -112,9 +112,14 @@ Claude must return a JSON array of exactly 5 objects:
 
 ---
 
-## Roadmap (current: Week 2)
-- [ ] Wire `Overview.jsx` and `CharityBreakdown.jsx` to `GET /api/analytics/*`
-- [ ] Wire `AIInsights.jsx` to `POST /api/insights/generate` (remove any client-side Anthropic calls)
-- [ ] Add loading skeletons to Overview and CharityBreakdown (AIInsights already has them)
-- [ ] Add `?days=` selector (30/60/90) wired to both frontend state and API query params
-- [ ] JWT auth middleware on server routes
+## Roadmap
+
+### Week 2 ✅ (complete — `b265903`)
+- [x] Wire `Overview.jsx` and `CharityBreakdown.jsx` to `GET /api/analytics/*`
+- [x] Wire `AIInsights.jsx` to `POST /api/insights/generate` (remove any client-side Anthropic calls)
+- [x] Add loading skeletons to Overview and CharityBreakdown (AIInsights already has them)
+- [x] Add `?days=` selector (30/60/90) wired to both frontend state and API query params
+- [x] JWT auth middleware on server routes
+
+### Week 3 (current)
+
