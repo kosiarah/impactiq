@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sparkles, RefreshCw, TrendingUp, Smartphone, Calendar, ShoppingBag, Users, ChevronRight, Zap, AlertCircle } from 'lucide-react'
+import { apiFetch } from '../api'
 
 const MERCHANT_CONTEXT = {
   storeName: 'Maple + Thread Co.',
@@ -193,19 +194,21 @@ function InsightCard({ insight, index }) {
   )
 }
 
-export default function AIInsights() {
+export default function AIInsights({ days = 90 }) {
   const [loading, setLoading] = useState(false)
   const [insights, setInsights] = useState(STATIC_INSIGHTS)
   const [lastRefreshed, setLastRefreshed] = useState('Just now')
   const [apiError, setApiError] = useState(null)
 
+  // Auto-fetch on mount
+  useEffect(() => { handleRefresh() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleRefresh = async () => {
     setLoading(true)
     setApiError(null)
     try {
-      const response = await fetch('http://localhost:3001/api/insights/generate', {
+      const response = await apiFetch('/api/insights/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
       })
 
       if (!response.ok) throw new Error(`API error: ${response.status}`)

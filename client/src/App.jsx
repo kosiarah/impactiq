@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { LayoutDashboard, Heart, Sparkles, TrendingUp, Settings, Bell, ChevronRight } from 'lucide-react'
 import Overview from './components/Overview'
 import CharityBreakdown from './components/CharityBreakdown'
 import AIInsights from './components/AIInsights'
+import { getToken, setToken } from './api'
 
 const NAV = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -12,6 +13,17 @@ const NAV = [
 
 export default function App() {
   const [active, setActive] = useState('overview')
+  const [days, setDays] = useState(90)
+
+  // Bootstrap a dev JWT on first load if none is stored
+  useEffect(() => {
+    if (!getToken()) {
+      fetch('/api/auth/token', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json())
+        .then(d => { if (d.token) setToken(d.token) })
+        .catch(() => {}) // non-fatal — protected routes will show their own error
+    }
+  }, [])
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080d1a]">
@@ -83,12 +95,30 @@ export default function App() {
               {NAV.find(n => n.id === active)?.label}
             </h1>
             <p className="text-xs text-slate-500 font-body mt-0.5">
-              {active === 'overview' && 'Last 90 days · All channels'}
-              {active === 'charities' && 'Performance breakdown by charity partner'}
+              {active === 'overview' && `Last ${days} days · All channels`}
+              {active === 'charities' && `Last ${days} days · Performance breakdown by charity partner`}
               {active === 'insights' && 'AI-generated recommendations for your store'}
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {/* Days selector — only shown on data tabs */}
+            {active !== 'insights' && (
+              <div className="flex items-center gap-1 bg-slate-800/60 rounded-xl p-1 border border-slate-700/40">
+                {[30, 60, 90].map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setDays(d)}
+                    className={`px-3 py-1 rounded-lg text-xs font-body font-500 transition-all duration-200 ${
+                      days === d
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'text-slate-400 hover:text-slate-300'
+                    }`}
+                  >
+                    {d}d
+                  </button>
+                ))}
+              </div>
+            )}
             <button className="relative p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all">
               <Bell size={17} />
               <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-emerald-400 rounded-full" />
@@ -102,9 +132,9 @@ export default function App() {
 
         {/* Page content */}
         <div className="p-8">
-          {active === 'overview' && <Overview />}
-          {active === 'charities' && <CharityBreakdown />}
-          {active === 'insights' && <AIInsights />}
+          {active === 'overview' && <Overview days={days} />}
+          {active === 'charities' && <CharityBreakdown days={days} />}
+          {active === 'insights' && <AIInsights days={days} />}
         </div>
       </main>
     </div>

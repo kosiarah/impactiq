@@ -3,6 +3,8 @@ import cors from 'cors'
 import 'dotenv/config'
 import analyticsRouter from './routes/analytics.js'
 import insightsRouter from './routes/insights.js'
+import authRouter from './routes/auth.js'
+import { requireAuth } from './middleware/auth.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -10,11 +12,14 @@ const PORT = process.env.PORT || 3001
 app.use(cors())
 app.use(express.json())
 
-// Routes
-app.use('/api/analytics', analyticsRouter)
-app.use('/api/insights', insightsRouter)
+// Public routes
+app.use('/api/auth', authRouter)
 
-// Health check
+// Protected routes
+app.use('/api/analytics', requireAuth, analyticsRouter)
+app.use('/api/insights', requireAuth, insightsRouter)
+
+// Health check (public)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'ImpactIQ API', timestamp: new Date().toISOString() })
 })
@@ -38,11 +43,13 @@ app.get('/', (req, res) => {
         <p>The frontend app is at <a href="http://localhost:5173">http://localhost:5173</a></p>
         <h3>Available endpoints</h3>
         <ul>
+          <li><code>POST /api/auth/token</code> — get a dev JWT</li>
           <li><code>GET /api/health</code></li>
-          <li><code>GET /api/analytics/overview?days=90</code></li>
-          <li><code>GET /api/analytics/charities?days=90</code></li>
-          <li><code>POST /api/insights/generate</code></li>
+          <li><code>GET /api/analytics/overview?days=90</code> 🔒</li>
+          <li><code>GET /api/analytics/charities?days=90</code> 🔒</li>
+          <li><code>POST /api/insights/generate</code> 🔒</li>
         </ul>
+        <p style="color:#475569; font-size:13px">🔒 = requires <code>Authorization: Bearer &lt;token&gt;</code></p>
       </body>
     </html>
   `)
