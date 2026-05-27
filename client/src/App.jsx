@@ -12,7 +12,7 @@ function Toast({ message, onDone }) {
   }, [onDone])
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/40 fade-up">
+    <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/40 fade-up">
       <Construction size={14} className="text-amber-400 flex-shrink-0" />
       <span className="text-sm font-body text-slate-200">{message}</span>
     </div>
@@ -94,7 +94,16 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080d1a]">
-      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+      {toast && (
+        <div
+          className="fixed bottom-6 z-50 flex justify-center pointer-events-none"
+          style={{ left: sidebarOpen ? '15rem' : '0', right: 0, transition: 'left 300ms' }}
+        >
+          <div className="pointer-events-auto">
+            <Toast message={toast} onDone={() => setToast(null)} />
+          </div>
+        </div>
+      )}
       {/* Sidebar */}
       <div className="relative flex-shrink-0">
         <button
