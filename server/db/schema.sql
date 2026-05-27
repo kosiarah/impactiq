@@ -31,3 +31,5 @@ CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_completed ON orders(completed);
 CREATE INDEX IF NOT EXISTS idx_order_charities_charity ON order_charities(charity_id);
 CREATE INDEX IF NOT EXISTS idx_order_charities_order ON order_charities(order_id);
+-- Composite index covering all analytics WHERE clauses (shop_id, created_at, completed)
+CREATE INDEX IF NOT EXISTS idx_orders_filters ON orders(shop_id, created_at, completed);

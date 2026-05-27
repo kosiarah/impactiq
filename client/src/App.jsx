@@ -1,9 +1,41 @@
-import { useState, useEffect } from 'react'
-import { LayoutDashboard, Heart, Sparkles, TrendingUp, Settings, Bell, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useRef, Component, lazy, Suspense } from 'react'
+import { LayoutDashboard, Heart, Sparkles, TrendingUp, Settings, Bell, ChevronRight, ChevronLeft, Construction } from 'lucide-react'
 import Overview from './components/Overview'
-import CharityBreakdown from './components/CharityBreakdown'
+const CharityBreakdown = lazy(() => import('./components/CharityBreakdown'))
 import AIInsights from './components/AIInsights'
 import { getToken, setToken } from './api'
+
+function Toast({ message, onDone }) {
+  useEffect(() => {
+    const id = setTimeout(onDone, 3000)
+    return () => clearTimeout(id)
+  }, [onDone])
+
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/40 fade-up">
+      <Construction size={14} className="text-amber-400 flex-shrink-0" />
+      <span className="text-sm font-body text-slate-200">{message}</span>
+    </div>
+  )
+}
+
+class ErrorBoundary extends Component {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  componentDidCatch(err) { console.error('Screen error:', err) }
+  render() {
+    if (this.state.hasError) return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <p className="text-slate-400 text-sm font-body">Something went wrong loading this page.</p>
+        <button
+          onClick={() => this.setState({ hasError: false })}
+          className="text-xs text-emerald-400 hover:text-emerald-300 font-body"
+        >Try again</button>
+      </div>
+    )
+    return this.props.children
+  }
+}
 
 const NAV = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -11,9 +43,44 @@ const NAV = [
   { id: 'insights', label: 'AI Insights', icon: Sparkles },
 ]
 
+function useRelativeTime(date) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!date) return
+    const id = setInterval(() => setTick(t => t + 1), 30000)
+    return () => clearInterval(id)
+  }, [date])
+  if (!date) return 'Never'
+  const seconds = Math.floor((Date.now() - date) / 1000)
+  if (seconds < 10) return 'Just now'
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes === 1) return '1 min ago'
+  return `${minutes} min ago`
+}
+
 export default function App() {
   const [active, setActive] = useState('overview')
   const [days, setDays] = useState(90)
+  const [lastSynced, setLastSynced] = useState(null)
+  const [toast, setToast] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const syncedLabel = useRelativeTime(lastSynced)
+
+  const handleSync = () => setLastSynced(new Date())
+  const showToast = (msg) => setToast(msg)
+  const daysDebounceRef = useRef(null)
+  const handleDaysChange = (d) => {
+    clearTimeout(daysDebounceRef.current)
+    daysDebounceRef.current = setTimeout(() => setDays(d), 250)
+  }
+
+  // Show toast when a 401 clears the JWT (session expired)
+  useEffect(() => {
+    const handler = () => showToast('Session expired — please refresh the page.')
+    window.addEventListener('impactiq:unauthorized', handler)
+    return () => window.removeEventListener('impactiq:unauthorized', handler)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Bootstrap a dev JWT on first load if none is stored
   useEffect(() => {
@@ -27,8 +94,16 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#080d1a]">
+      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
       {/* Sidebar */}
-      <aside className="w-60 flex-shrink-0 flex flex-col border-r border-slate-800/60 bg-[#0a0f1e]">
+      <div className="relative flex-shrink-0">
+        <button
+          onClick={() => setSidebarOpen(s => !s)}
+          className="absolute top-6 right-0 translate-x-full z-20 flex items-center justify-center w-5 h-9 bg-[#0a0f1e] border border-l-0 border-slate-800/60 rounded-r-lg text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          {sidebarOpen ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
+        </button>
+      <aside className={`${sidebarOpen ? 'w-60' : 'w-0'} h-full flex-shrink-0 flex flex-col border-r border-slate-800/60 bg-[#0a0f1e] overflow-hidden transition-all duration-300`}>
         {/* Logo */}
         <div className="px-6 pt-7 pb-8">
           <div className="flex items-center gap-2.5">
@@ -75,16 +150,20 @@ export default function App() {
 
         {/* Bottom */}
         <div className="p-4 border-t border-slate-800/60">
-          <button className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 transition-all font-body">
+          <button
+            onClick={() => showToast('Settings coming soon')}
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm text-slate-500 hover:text-slate-300 hover:bg-slate-800/50 transition-all font-body"
+          >
             <Settings size={15} />
             <span>Settings</span>
           </button>
           <div className="mt-3 px-3 py-2 rounded-lg bg-gradient-to-r from-emerald-500/5 to-cyan-500/5 border border-emerald-500/10">
             <div className="text-[10px] text-slate-500 font-body">Last synced</div>
-            <div className="text-xs text-slate-300 font-body font-500">2 minutes ago</div>
+            <div className="text-xs text-slate-300 font-body font-500">{syncedLabel}</div>
           </div>
         </div>
       </aside>
+      </div>
 
       {/* Main content */}
       <main className="flex-1 overflow-y-auto">
@@ -107,7 +186,7 @@ export default function App() {
                 {[30, 60, 90].map(d => (
                   <button
                     key={d}
-                    onClick={() => setDays(d)}
+                    onClick={() => handleDaysChange(d)}
                     className={`px-3 py-1 rounded-lg text-xs font-body font-500 transition-all duration-200 ${
                       days === d
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -119,7 +198,10 @@ export default function App() {
                 ))}
               </div>
             )}
-            <button className="relative p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all">
+            <button
+              onClick={() => showToast('Notifications coming soon')}
+              className="relative p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all"
+            >
               <Bell size={17} />
               <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-emerald-400 rounded-full" />
             </button>
@@ -132,9 +214,23 @@ export default function App() {
 
         {/* Page content */}
         <div className="p-8">
-          {active === 'overview' && <Overview days={days} />}
-          {active === 'charities' && <CharityBreakdown days={days} />}
-          {active === 'insights' && <AIInsights days={days} />}
+          {active === 'overview' && (
+            <ErrorBoundary key="overview">
+              <Overview days={days} onSync={handleSync} />
+            </ErrorBoundary>
+          )}
+          {active === 'charities' && (
+            <ErrorBoundary key="charities">
+              <Suspense fallback={<div className="text-slate-500 text-sm font-body p-4">Loading...</div>}>
+                <CharityBreakdown days={days} onSync={handleSync} />
+              </Suspense>
+            </ErrorBoundary>
+          )}
+          {active === 'insights' && (
+            <ErrorBoundary key="insights">
+              <AIInsights days={days} />
+            </ErrorBoundary>
+          )}
         </div>
       </main>
     </div>

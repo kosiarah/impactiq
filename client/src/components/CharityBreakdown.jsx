@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Heart, TrendingUp, ShoppingCart, Award, ArrowUpRight } from 'lucide-react'
+import { Heart, TrendingUp, ShoppingCart, Award, ArrowUpRight, RefreshCw } from 'lucide-react'
 import { apiFetch } from '../api'
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts'
 
@@ -60,23 +60,24 @@ function CharitySkeleton({ delay }) {
   )
 }
 
-export default function CharityBreakdown({ days = 90 }) {
+export default function CharityBreakdown({ days = 90, onSync }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [retryCount, setRetryCount] = useState(0)
 
   useEffect(() => {
+    const controller = new AbortController()
     setLoading(true)
     setError(null)
-    apiFetch(`/api/analytics/charities?days=${days}`)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
+    apiFetch(`/api/analytics/charities?days=${days}`, { signal: controller.signal })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then(d => { setData(d); onSync?.(); setLoading(false) })
+      .catch(e => {
+        if (e.name !== 'AbortError') { setError(e.message); setLoading(false) }
       })
-      .then(setData)
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [days])
+    return () => controller.abort()
+  }, [days, retryCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Enrich charities with palette colors
   const charities = (data?.charities || []).map((c, i) => ({
@@ -122,8 +123,15 @@ export default function CharityBreakdown({ days = 90 }) {
             </div>
           ))
         ) : error ? (
-          <div className="col-span-4 rounded-2xl bg-rose-500/5 border border-rose-500/20 p-6 text-rose-400 text-sm font-body">
-            Could not load charity data: {error}
+          <div className="col-span-4 rounded-2xl bg-rose-500/5 border border-rose-500/20 p-6 flex items-center justify-between">
+            <span className="text-rose-400 text-sm font-body">Unable to load charity data. Check your connection and try again.</span>
+            <button
+              onClick={() => setRetryCount(c => c + 1)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-body font-500 hover:bg-rose-500/20 transition-all flex-shrink-0 ml-4"
+            >
+              <RefreshCw size={12} />
+              Try again
+            </button>
           </div>
         ) : (
           [
@@ -167,8 +175,17 @@ export default function CharityBreakdown({ days = 90 }) {
         )}
       </div>
 
-      {/* Charity cards */}
-      <div className="space-y-3">
+      {/* Empty state */}
+      {!error && !loading && charities.length === 0 && (
+        <div className="rounded-2xl bg-slate-900/40 border border-slate-800/40 p-10 flex flex-col items-center justify-center gap-3 fade-up">
+          <div className="text-3xl">📭</div>
+          <p className="text-slate-400 text-sm font-body">No charity data found in this period.</p>
+          <p className="text-slate-600 text-xs font-body">Try selecting a wider date range.</p>
+        </div>
+      )}
+
+      {/* Charity cards — hidden on error or empty */}
+      {!error && !(charities.length === 0 && !loading) && <div className="space-y-3">
         {loading ? (
           Array.from({ length: 5 }).map((_, i) => (
             <CharitySkeleton key={i} delay={240 + i * 80} />
@@ -263,7 +280,7 @@ export default function CharityBreakdown({ days = 90 }) {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Radar + Revenue contribution */}
       {!loading && charities.length > 0 && (

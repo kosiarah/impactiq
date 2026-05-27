@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Sparkles, RefreshCw, TrendingUp, Smartphone, Calendar, ShoppingBag, Users, ChevronRight, Zap, AlertCircle } from 'lucide-react'
 import { apiFetch } from '../api'
 
@@ -197,13 +197,20 @@ function InsightCard({ insight, index }) {
 export default function AIInsights({ days = 90 }) {
   const [loading, setLoading] = useState(false)
   const [insights, setInsights] = useState(STATIC_INSIGHTS)
-  const [lastRefreshed, setLastRefreshed] = useState('Just now')
+  const [lastRefreshed, setLastRefreshed] = useState(null)
   const [apiError, setApiError] = useState(null)
+  const [stats, setStats] = useState(null)
+  const [statsError, setStatsError] = useState(false)
 
-  // Auto-fetch on mount
-  useEffect(() => { handleRefresh() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setStatsError(false)
+    apiFetch(`/api/analytics/overview?days=${days}`)
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(d => setStats(d))
+      .catch(() => setStatsError(true))
+  }, [days])
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setLoading(true)
     setApiError(null)
     try {
@@ -217,7 +224,7 @@ export default function AIInsights({ days = 90 }) {
 
       if (Array.isArray(data.insights) && data.insights.length > 0) {
         setInsights(data.insights)
-        setLastRefreshed('Just now')
+        setLastRefreshed(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }))
       }
     } catch (err) {
       console.error('Insights refresh failed:', err)
@@ -225,7 +232,10 @@ export default function AIInsights({ days = 90 }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  // Auto-fetch on mount
+  useEffect(() => { handleRefresh() }, [handleRefresh])
 
   return (
     <div className="space-y-6">
@@ -239,7 +249,7 @@ export default function AIInsights({ days = 90 }) {
             <div>
               <h2 className="font-display font-700 text-white text-base">AI Business Advisor</h2>
               <p className="text-xs text-slate-400 font-body mt-0.5">
-                Powered by Claude · Analyzing {MERCHANT_CONTEXT.totalOrders.toLocaleString()} orders · Last updated: {lastRefreshed}
+                Powered by Claude · Analyzing {(stats?.totalOrders ?? MERCHANT_CONTEXT.totalOrders).toLocaleString()} orders · Last updated: {loading ? 'Fetching…' : lastRefreshed ?? '—'}
               </p>
             </div>
           </div>
@@ -256,10 +266,10 @@ export default function AIInsights({ days = 90 }) {
         {/* Context strip */}
         <div className="mt-5 grid grid-cols-4 gap-3">
           {[
-            { label: 'Orders analyzed', value: '1,380' },
-            { label: 'Charity selection rate', value: '61.4%' },
-            { label: 'Revenue attributed', value: '$94,210' },
-            { label: 'AOV lift vs baseline', value: '+53.6%' },
+            { label: 'Orders analyzed', value: stats ? stats.totalOrders.toLocaleString() : '—' },
+            { label: 'Charity selection rate', value: stats ? `${stats.charityConversionRate.toFixed(1)}%` : '—' },
+            { label: 'Revenue attributed', value: stats ? `$${Math.round(stats.charityRevenue).toLocaleString()}` : '—' },
+            { label: 'AOV lift vs baseline', value: stats ? `+${(((stats.charityAOV - stats.baselineAOV) / stats.baselineAOV) * 100).toFixed(1)}%` : '—' },
           ].map((item, i) => (
             <div key={i} className="rounded-xl bg-slate-900/60 px-4 py-3 border border-slate-800/60">
               <div className="text-xs text-slate-500 font-body">{item.label}</div>
@@ -267,6 +277,11 @@ export default function AIInsights({ days = 90 }) {
             </div>
           ))}
         </div>
+        {statsError && (
+          <p className="text-xs text-slate-600 font-body mt-2">
+            Context stats unavailable — insights still generated from live data.
+          </p>
+        )}
       </div>
 
       {/* Error state */}

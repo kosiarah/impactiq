@@ -5,60 +5,54 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const router = Router()
-
-function getDb() {
-  return new Database(join(__dirname, '../db/impactiq.db'))
-}
+const db = new Database(join(__dirname, '../db/impactiq.db'))
 
 // GET /api/analytics/overview
 router.get('/overview', (req, res) => {
-  const db = getDb()
   try {
-    const days = parseInt(req.query.days) || 90
+    const _d = parseInt(req.query.days)
+    const days = isNaN(_d) || _d <= 0 || _d > 3650 ? 90 : _d
+    const shopId = req.merchant.shopDomain
     const since = new Date()
     since.setDate(since.getDate() - days)
     const sinceStr = since.toISOString().replace('T', ' ').substring(0, 19)
 
-    // Total donations
     const donations = db.prepare(`
       SELECT COALESCE(SUM(oc.donation_amount), 0) as total
       FROM order_charities oc
       JOIN orders o ON oc.order_id = o.id
-      WHERE o.created_at >= ?
-    `).get(sinceStr)
+      WHERE o.created_at >= ? AND o.shop_id = ?
+    `).get(sinceStr, shopId)
 
-    // Charity vs baseline conversion rate
     const conversionStats = db.prepare(`
-      SELECT 
+      SELECT
         COUNT(*) as total_orders,
         SUM(completed) as completed_orders,
         COUNT(CASE WHEN oc.id IS NOT NULL THEN 1 END) as charity_shown,
         SUM(CASE WHEN oc.id IS NOT NULL AND o.completed = 1 THEN 1 ELSE 0 END) as charity_completed
       FROM orders o
       LEFT JOIN order_charities oc ON o.id = oc.order_id
-      WHERE o.created_at >= ?
-    `).get(sinceStr)
+      WHERE o.created_at >= ? AND o.shop_id = ?
+    `).get(sinceStr, shopId)
 
-    // Revenue attributed to charity orders
     const revenueStats = db.prepare(`
-      SELECT 
+      SELECT
         COALESCE(SUM(o.total_price), 0) as charity_revenue,
         COALESCE(AVG(o.total_price), 0) as charity_aov
       FROM orders o
       JOIN order_charities oc ON o.id = oc.order_id
-      WHERE o.created_at >= ? AND o.completed = 1
-    `).get(sinceStr)
+      WHERE o.created_at >= ? AND o.completed = 1 AND o.shop_id = ?
+    `).get(sinceStr, shopId)
 
     const baselineAOV = db.prepare(`
       SELECT COALESCE(AVG(total_price), 0) as baseline_aov
       FROM orders o
       LEFT JOIN order_charities oc ON o.id = oc.order_id
-      WHERE oc.id IS NULL AND o.completed = 1 AND o.created_at >= ?
-    `).get(sinceStr)
+      WHERE oc.id IS NULL AND o.completed = 1 AND o.created_at >= ? AND o.shop_id = ?
+    `).get(sinceStr, shopId)
 
-    // Time series (weekly buckets)
     const timeSeries = db.prepare(`
-      SELECT 
+      SELECT
         strftime('%Y-%W', o.created_at) as week,
         MIN(DATE(o.created_at)) as week_start,
         COUNT(oc.id) as charity_orders,
@@ -66,10 +60,10 @@ router.get('/overview', (req, res) => {
         COALESCE(SUM(o.total_price), 0) as revenue
       FROM orders o
       LEFT JOIN order_charities oc ON o.id = oc.order_id
-      WHERE o.created_at >= ?
+      WHERE o.created_at >= ? AND o.shop_id = ?
       GROUP BY week
       ORDER BY week
-    `).all(sinceStr)
+    `).all(sinceStr, shopId)
 
     res.json({
       totalDonations: donations.total,
@@ -86,22 +80,24 @@ router.get('/overview', (req, res) => {
       charityOrders: conversionStats.charity_shown,
       timeSeries,
     })
-  } finally {
-    db.close()
+  } catch (err) {
+    console.error('Analytics overview error:', err)
+    res.status(500).json({ error: 'Failed to load overview data' })
   }
 })
 
 // GET /api/analytics/charities
 router.get('/charities', (req, res) => {
-  const db = getDb()
   try {
-    const days = parseInt(req.query.days) || 90
+    const _d = parseInt(req.query.days)
+    const days = isNaN(_d) || _d <= 0 || _d > 3650 ? 90 : _d
+    const shopId = req.merchant.shopDomain
     const since = new Date()
     since.setDate(since.getDate() - days)
     const sinceStr = since.toISOString().replace('T', ' ').substring(0, 19)
 
     const charityStats = db.prepare(`
-      SELECT 
+      SELECT
         c.id,
         c.name,
         c.category,
@@ -112,17 +108,17 @@ router.get('/charities', (req, res) => {
         COALESCE(AVG(CASE WHEN o.completed = 1 THEN o.total_price END), 0) as avg_order_value
       FROM charities c
       LEFT JOIN order_charities oc ON c.id = oc.charity_id
-      LEFT JOIN orders o ON oc.order_id = o.id AND o.created_at >= ?
+      LEFT JOIN orders o ON oc.order_id = o.id AND o.created_at >= ? AND o.shop_id = ?
       GROUP BY c.id, c.name, c.category, c.emoji
       ORDER BY total_selections DESC
-    `).all(sinceStr)
+    `).all(sinceStr, shopId)
 
     const baselineAOV = db.prepare(`
       SELECT COALESCE(AVG(total_price), 0) as aov
       FROM orders o
       LEFT JOIN order_charities oc ON o.id = oc.order_id
-      WHERE oc.id IS NULL AND o.completed = 1 AND o.created_at >= ?
-    `).get(sinceStr).aov
+      WHERE oc.id IS NULL AND o.completed = 1 AND o.created_at >= ? AND o.shop_id = ?
+    `).get(sinceStr, shopId).aov
 
     const totalSelections = charityStats.reduce((s, c) => s + c.total_selections, 0)
 
@@ -136,8 +132,9 @@ router.get('/charities', (req, res) => {
       baselineAOV,
       totalSelections,
     })
-  } finally {
-    db.close()
+  } catch (err) {
+    console.error('Analytics charities error:', err)
+    res.status(500).json({ error: 'Failed to load charity data' })
   }
 })
 

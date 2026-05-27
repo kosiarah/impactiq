@@ -6,87 +6,83 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const router = Router()
+const db = new Database(join(__dirname, '../db/impactiq.db'))
 
-function getDb() {
-  return new Database(join(__dirname, '../db/impactiq.db'))
-}
-
-function gatherMerchantStats(db) {
+function gatherMerchantStats(db, shopId) {
   const days = 90
   const since = new Date()
   since.setDate(since.getDate() - days)
   const sinceStr = since.toISOString().replace('T', ' ').substring(0, 19)
 
   const overview = db.prepare(`
-    SELECT 
+    SELECT
       COUNT(*) as total_orders,
       SUM(completed) as completed_orders,
       AVG(total_price) as overall_aov,
       SUM(total_price) as total_revenue
-    FROM orders WHERE created_at >= ?
-  `).get(sinceStr)
+    FROM orders WHERE created_at >= ? AND shop_id = ?
+  `).get(sinceStr, shopId)
 
   const charityStats = db.prepare(`
-    SELECT 
+    SELECT
       COUNT(DISTINCT oc.order_id) as charity_order_count,
       AVG(o.total_price) as charity_aov,
       SUM(oc.donation_amount) as total_donations
     FROM order_charities oc
     JOIN orders o ON oc.order_id = o.id
-    WHERE o.created_at >= ? AND o.completed = 1
-  `).get(sinceStr)
+    WHERE o.created_at >= ? AND o.completed = 1 AND o.shop_id = ?
+  `).get(sinceStr, shopId)
 
   const baselineAOV = db.prepare(`
     SELECT AVG(o.total_price) as aov
     FROM orders o
     LEFT JOIN order_charities oc ON o.id = oc.order_id
-    WHERE oc.id IS NULL AND o.completed = 1 AND o.created_at >= ?
-  `).get(sinceStr)
+    WHERE oc.id IS NULL AND o.completed = 1 AND o.created_at >= ? AND o.shop_id = ?
+  `).get(sinceStr, shopId)
 
   const mobileStats = db.prepare(`
-    SELECT 
+    SELECT
       source,
       COUNT(*) as total,
       COUNT(oc.id) as with_charity
     FROM orders o
     LEFT JOIN order_charities oc ON o.id = oc.order_id
-    WHERE o.created_at >= ? AND o.completed = 1
+    WHERE o.created_at >= ? AND o.completed = 1 AND o.shop_id = ?
     GROUP BY source
-  `).all(sinceStr)
+  `).all(sinceStr, shopId)
 
   const weekendStats = db.prepare(`
-    SELECT 
+    SELECT
       CASE WHEN strftime('%w', created_at) IN ('0','6') THEN 'weekend' ELSE 'weekday' END as day_type,
       COUNT(*) as total,
       COUNT(oc.id) as with_charity
     FROM orders o
     LEFT JOIN order_charities oc ON o.id = oc.order_id
-    WHERE o.created_at >= ? AND o.completed = 1
+    WHERE o.created_at >= ? AND o.completed = 1 AND o.shop_id = ?
     GROUP BY day_type
-  `).all(sinceStr)
+  `).all(sinceStr, shopId)
 
   const topCharities = db.prepare(`
     SELECT c.name, COUNT(oc.id) as selections, AVG(o.total_price) as avg_aov, SUM(oc.donation_amount) as donations
     FROM charities c
     JOIN order_charities oc ON c.id = oc.charity_id
     JOIN orders o ON oc.order_id = o.id
-    WHERE o.created_at >= ? AND o.completed = 1
+    WHERE o.created_at >= ? AND o.completed = 1 AND o.shop_id = ?
     GROUP BY c.id, c.name
     ORDER BY selections DESC
-  `).all(sinceStr)
+  `).all(sinceStr, shopId)
 
   return { overview, charityStats, baselineAOV, mobileStats, weekendStats, topCharities }
 }
 
 // POST /api/insights/generate
 router.post('/generate', async (req, res) => {
-  const db = getDb()
   let stats
-
   try {
-    stats = gatherMerchantStats(db)
-  } finally {
-    db.close()
+    stats = gatherMerchantStats(db, req.merchant.shopDomain)
+  } catch (err) {
+    console.error('Stats gather error:', err)
+    return res.status(500).json({ error: 'Failed to load merchant data' })
   }
 
   const mobile = stats.mobileStats.find(s => s.source === 'mobile')
@@ -110,8 +106,8 @@ Merchant data (last 90 days):
 - Desktop charity selection rate: ${desktop ? ((desktop.with_charity / desktop.total) * 100).toFixed(1) : 'N/A'}%
 - Weekend charity selection rate: ${weekend ? ((weekend.with_charity / weekend.total) * 100).toFixed(1) : 'N/A'}%
 - Weekday charity selection rate: ${weekday ? ((weekday.with_charity / weekday.total) * 100).toFixed(1) : 'N/A'}%
-- Top charity by selections: ${topCharity?.name} (${topCharity?.selections} orders, $${topCharity?.avg_aov?.toFixed(2)} AOV)
-- Highest AOV charity: ${highestAOVCharity?.name} ($${highestAOVCharity?.avg_aov?.toFixed(2)} AOV)
+- Top charity by selections: ${topCharity?.name ?? 'N/A'} (${topCharity?.selections ?? 0} orders, $${topCharity?.avg_aov?.toFixed(2) ?? '0.00'} AOV)
+- Highest AOV charity: ${highestAOVCharity?.name ?? 'N/A'} ($${highestAOVCharity?.avg_aov?.toFixed(2) ?? '0.00'} AOV)
 
 Generate 5 specific, actionable business recommendations. Return ONLY a JSON array — no preamble, no markdown fences.
 
@@ -130,19 +126,30 @@ Each object must have exactly these fields:
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-6',
       max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     })
 
     const text = message.content.find(b => b.type === 'text')?.text || ''
     const cleaned = text.replace(/```json|```/g, '').trim()
-    const insights = JSON.parse(cleaned)
+
+    let insights
+    try {
+      insights = JSON.parse(cleaned)
+    } catch {
+      console.error('Claude returned non-JSON response:', cleaned.substring(0, 200))
+      return res.status(500).json({ error: 'Failed to generate insights' })
+    }
+
+    if (!Array.isArray(insights) || insights.length === 0) {
+      return res.status(500).json({ error: 'Failed to generate insights' })
+    }
 
     res.json({ insights, generatedAt: new Date().toISOString() })
   } catch (err) {
     console.error('Claude API error:', err.message)
-    res.status(500).json({ error: 'Failed to generate insights', detail: err.message })
+    res.status(500).json({ error: 'Failed to generate insights' })
   }
 })
 

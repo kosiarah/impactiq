@@ -7,14 +7,13 @@ import jwt from 'jsonwebtoken'
 
 const router = Router()
 
-// POST /api/auth/token
-// Body: { shopDomain: "my-store.myshopify.com" }  (optional in dev)
+// POST /api/auth/token — dev only, replaced by Shopify OAuth in production
 router.post('/token', (req, res) => {
   if (process.env.NODE_ENV === 'production') {
     return res.status(403).json({ error: 'Use Shopify OAuth in production' })
   }
 
-  const shopDomain = req.body?.shopDomain || 'dev-store.myshopify.com'
+  const shopDomain = 'dev-store.myshopify.com'
   const token = jwt.sign(
     { shopDomain, plan: 'pro', iat: Math.floor(Date.now() / 1000) },
     process.env.JWT_SECRET,

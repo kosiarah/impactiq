@@ -15,6 +15,8 @@ db.run(`CREATE TABLE IF NOT EXISTS charities (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL, category TEXT NOT NULL, emoji TEXT
 );`)
+// Note: schema.sql defines shopify_order_id TEXT UNIQUE — seed uses sql.js which doesn't
+// enforce that constraint. INSERT OR IGNORE prevents duplicates on re-run.
 db.run(`CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   shopify_order_id TEXT, created_at TEXT NOT NULL,
@@ -85,7 +87,7 @@ for (let i = 0; i < 1380; i++) {
     : normalish(BASELINE_AOV, 28)
   const total = Math.round(aov * 100) / 100
 
-  db.run('INSERT INTO orders (shopify_order_id, created_at, total_price, completed, source, customer_id) VALUES (?,?,?,?,?,?)',
+  db.run('INSERT OR IGNORE INTO orders (shopify_order_id, created_at, total_price, completed, source, customer_id) VALUES (?,?,?,?,?,?)',
     [orderId, createdAt, total, completed, source, `CUST-${randInt(1, 850)}`])
 
   if (hasCharity && (completed === 1 || Math.random() < 0.85)) {

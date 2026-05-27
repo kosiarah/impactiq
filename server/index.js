@@ -1,15 +1,33 @@
 import express from 'express'
 import cors from 'cors'
+import morgan from 'morgan'
 import 'dotenv/config'
+import Database from 'better-sqlite3'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import analyticsRouter from './routes/analytics.js'
 import insightsRouter from './routes/insights.js'
 import authRouter from './routes/auth.js'
 import { requireAuth } from './middleware/auth.js'
 
+if (!process.env.JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET env var must be set before starting the server')
+}
+
+// One-time migration: add shop_id to orders if not present
+// Safe to re-run on every restart — try/catch skips if column already exists
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const _mdb = new Database(join(__dirname, 'db/impactiq.db'))
+try { _mdb.exec(`ALTER TABLE orders ADD COLUMN shop_id TEXT NOT NULL DEFAULT 'dev-store.myshopify.com'`) } catch {}
+try { _mdb.exec(`CREATE INDEX IF NOT EXISTS idx_orders_shop_id ON orders(shop_id)`) } catch {}
+try { _mdb.exec(`CREATE INDEX IF NOT EXISTS idx_orders_filters ON orders(shop_id, created_at, completed)`) } catch {}
+_mdb.close()
+
 const app = express()
 const PORT = process.env.PORT || 3001
 
-app.use(cors())
+app.use(cors({ origin: process.env.ALLOWED_ORIGIN || 'http://localhost:5173' }))
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 app.use(express.json())
 
 // Public routes
