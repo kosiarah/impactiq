@@ -116,3 +116,46 @@ _Generated: 2026-05-27 · Updated: 2026-05-27 after stress test session_
 
 - **`main` (local + remote):** `b265903` — Week 2 complete (frontend wired to API, JWT auth, days selector)
 - **Uncommitted changes (this session):** retry buttons on Overview + CharityBreakdown, live "Last synced" in sidebar, AIInsights context strip wired to API.
+
+---
+
+## Potential Analysis
+_Assessed: 2026-05-27_
+
+### Market Potential: 6/10
+
+**What's working in your favor:**
+- Real, specific pain point — merchants genuinely don't know if charity tie-ins move the needle
+- $29–49/mo is proven Shopify app pricing
+- The AI insights angle differentiates from a plain dashboard
+- ESG/cause marketing is growing, not shrinking
+
+**What caps the ceiling:**
+- **TAM is small.** You're targeting merchants already using Conscious Cart or Shop for Good — that's maybe 5,000–15,000 stores globally. Even with 5% penetration at $39/mo, that's ~$140K ARR maximum. Not a venture-scale business; potentially a solid indie/lifestyle business.
+- **You're one feature update away from irrelevance.** If Conscious Cart ships their own analytics tab, you're done overnight. They own the data pipeline you'd need.
+- **The actual hard problem hasn't been built yet.** Everything in Week 3/4 — Shopify OAuth, real order sync, multi-tenancy — *that's* the product. What exists now is a well-styled demo.
+
+---
+
+### Current Success Rate: ~15–20%
+
+That's not a knock on the code quality — the frontend looks sharp and the architecture is clean. The risk is structural:
+
+- The seeded SQLite DB means you have no idea if the real Shopify data model maps cleanly to yours
+- C5 (no `shop_id` on any table) means multi-tenancy is a schema migration away from blocking everything
+- You have 8 critical bugs before this could handle a real merchant without an incident
+- No real customer has validated that this dashboard answers the question they actually have
+
+**The single biggest predictor of failure here isn't technical** — it's building the full Shopify integration and then discovering merchants don't churn less or convert more because of charity analytics visibility.
+
+---
+
+### What Moves the Needle
+
+If you want to push that success rate closer to 50%+, the priority order is:
+
+1. **Talk to 10 merchants this week** — not pitch, ask. Do they actually look at charity performance? What decisions would this change?
+2. **Get one pre-sale or LOI before building Week 3** — if someone won't pay $39 for a promise, they won't pay $39 for the product
+3. **Build Week 3 (Shopify OAuth + real data)** as a proof of concept with one real store before anything else
+
+The bones are good. The question is whether the market is there.
